@@ -4,12 +4,20 @@ import { CONFIG } from '../config.js';
 import { todayISO, addDays, weekStart } from './dates.js';
 
 export const DEMO = !CONFIG.SUPABASE_URL;
+const BASE = () => CONFIG.SUPABASE_URL.replace(/\/$/, '');
+
+// Where a stored photo can be loaded from
+export function photoURL(path) {
+  if (!path) return '';
+  if (/^(data:|assets\/|blob:|https?:)/.test(path)) return path;
+  return `${BASE()}/storage/v1/object/public/photos/${path}`;
+}
 
 async function rpc(fn, args) {
   const key = CONFIG.SUPABASE_KEY;
   const headers = { 'Content-Type': 'application/json', apikey: key };
   if (!key.startsWith('sb_')) headers.Authorization = `Bearer ${key}`; // legacy anon JWT keys
-  const res = await fetch(`${CONFIG.SUPABASE_URL.replace(/\/$/, '')}/rest/v1/rpc/${fn}`, {
+  const res = await fetch(`${BASE()}/rest/v1/rpc/${fn}`, {
     method: 'POST', headers, body: JSON.stringify(args),
   });
   const text = await res.text();
@@ -35,10 +43,30 @@ const real = {
   saveLog: (t, goalId, date, done, amount, note) =>
     rpc('fb_save_log', { p_token: t, p_goal_id: goalId, p_date: date, p_done: done, p_amount: amount, p_note: note }),
   saveDayNote: (t, date, note) => rpc('fb_save_day_note', { p_token: t, p_date: date, p_note: note }),
+  async uploadPhoto(t, blob) {
+    const ticket = await rpc('fb_photo_ticket', { p_token: t });
+    const path = `${ticket}/${uid()}.jpg`;
+    const key = CONFIG.SUPABASE_KEY;
+    const res = await fetch(`${BASE()}/storage/v1/object/photos/${path}`, {
+      method: 'POST',
+      headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': blob.type || 'image/jpeg', 'x-upsert': 'false' },
+      body: blob,
+    });
+    if (!res.ok) { const e = new Error('upload_failed'); e.code = 'upload_failed'; throw e; }
+    return path;
+  },
+  addPhoto: (t, path, goalId, date, caption) =>
+    rpc('fb_add_photo', { p_token: t, p_path: path, p_goal_id: goalId, p_date: date, p_caption: caption }),
+  updatePhoto: (t, id, caption) => rpc('fb_update_photo', { p_token: t, p_photo_id: id, p_caption: caption }),
+  deletePhoto: (t, id) => rpc('fb_delete_photo', { p_token: t, p_photo_id: id }),
+  toggleLike: (t, id) => rpc('fb_toggle_like', { p_token: t, p_photo_id: id }),
+  feed: (t, before, limit = 15) => rpc('fb_feed', { p_token: t, p_before: before, p_limit: limit }),
+  photosBetween: (t, from, to, everyone = false) =>
+    rpc('fb_photos_between', { p_token: t, p_from: from, p_to: to, p_everyone: everyone }),
 };
 
 // ---------------------------------------------------------------- demo API
-const DKEY = 'fambam_demo_db_v1';
+const DKEY = 'fambam_demo_db_v2';
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2));
 const norm = (p) => String(p || '').replace(/\D/g, '').slice(-10);
 
@@ -75,7 +103,21 @@ function seedDemo() {
     if (i % 5 !== 4) log(g9, d, { amount: 64 });
   }
   day_notes.push({ member_id: 'm1', log_date: addDays(todayISO(), -1), note: 'Skipped the gym but did 3 miles with the pup 🐕', updated_at: new Date().toISOString() });
-  return { members, goals, logs, day_notes, sessions: {} };
+  const pic = (emoji, a, b) => 'data:image/svg+xml,' + encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs><rect width="400" height="400" fill="url(#g)"/><text x="200" y="250" font-size="160" text-anchor="middle">${emoji}</text></svg>`);
+  const ago = (h) => new Date(Date.now() - h * 3600e3).toISOString();
+  const photos = [
+    { id: uid(), member_id: 'm6', goal_id: g7.id, log_date: todayISO(), path: pic('🏃', '#ffd38a', '#f29bb0'), caption: 'Sunrise 5k before work!', created_at: ago(2) },
+    { id: uid(), member_id: 'm1', goal_id: g3.id, log_date: addDays(todayISO(), -1), path: pic('🐕', '#bfe3f2', '#8cc46b'), caption: 'Trail run with my running buddy', created_at: ago(20) },
+    { id: uid(), member_id: 'm8', goal_id: g9.id, log_date: addDays(todayISO(), -1), path: pic('💧', '#cfeaf6', '#4a7fd1'), caption: 'Hydration station', created_at: ago(28) },
+    { id: uid(), member_id: 'm4', goal_id: g5.id, log_date: addDays(todayISO(), -2), path: pic('💪', '#f4b63f', '#d6453d'), caption: '50 pushups, no breaks', created_at: ago(50) },
+  ];
+  const photo_likes = [
+    { photo_id: photos[0].id, member_id: 'm0' }, { photo_id: photos[0].id, member_id: 'm7' },
+    { photo_id: photos[1].id, member_id: 'm2' }, { photo_id: photos[1].id, member_id: 'm8' }, { photo_id: photos[1].id, member_id: 'm5' },
+    { photo_id: photos[3].id, member_id: 'm1' },
+  ];
+  return { members, goals, logs, day_notes, photos, photo_likes, sessions: {} };
 }
 
 function db() {
@@ -150,6 +192,53 @@ const demo = {
     save(d);
   },
 };
+
+function photoJSON(d, p, me) {
+  const likes = d.photo_likes.filter((l) => l.photo_id === p.id);
+  return { ...p, likes: likes.length, liked: likes.some((l) => l.member_id === me),
+    likers: likes.map((l) => (d.members.find((m) => m.id === l.member_id) || {}).name) };
+}
+Object.assign(demo, {
+  async uploadPhoto(t, blob) {
+    const { blobToDataURL } = await import('./image.js');
+    return blobToDataURL(blob);
+  },
+  async addPhoto(t, path, goalId, date, caption) {
+    const d = db(); const me = who(d, t);
+    const p = { id: uid(), member_id: me, goal_id: goalId, log_date: date, path, caption: caption && caption.trim() ? caption.trim() : null, created_at: new Date().toISOString() };
+    d.photos.push(p);
+    try { save(d); } catch { /* storage full */ }
+    if (!localStorage.getItem(DKEY).includes(p.id)) { const e = new Error('demo_storage_full'); e.code = 'demo_storage_full'; throw e; }
+    return wait(photoJSON(d, p, me));
+  },
+  async updatePhoto(t, id, caption) {
+    const d = db(); const me = who(d, t); const p = d.photos.find((x) => x.id === id && x.member_id === me);
+    if (p) p.caption = caption && caption.trim() ? caption.trim() : null; save(d);
+  },
+  async deletePhoto(t, id) {
+    const d = db(); const me = who(d, t);
+    d.photos = d.photos.filter((x) => !(x.id === id && x.member_id === me));
+    d.photo_likes = d.photo_likes.filter((l) => d.photos.some((p) => p.id === l.photo_id)); save(d);
+  },
+  async toggleLike(t, id) {
+    const d = db(); const me = who(d, t);
+    const had = d.photo_likes.some((l) => l.photo_id === id && l.member_id === me);
+    if (had) d.photo_likes = d.photo_likes.filter((l) => !(l.photo_id === id && l.member_id === me));
+    else d.photo_likes.push({ photo_id: id, member_id: me });
+    save(d); return wait(photoJSON(d, d.photos.find((p) => p.id === id), me));
+  },
+  async feed(t, before, limit = 15) {
+    const d = db(); const me = who(d, t);
+    const photos = d.photos.filter((p) => !before || p.created_at < before)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limit).map((p) => photoJSON(d, p, me));
+    return wait({ members: d.members.map(pub), photos, goals: d.goals.map((g) => ({ id: g.id, title: g.title, emoji: g.emoji })) });
+  },
+  async photosBetween(t, from, to, everyone = false) {
+    const d = db(); const me = who(d, t);
+    return wait(d.photos.filter((p) => (everyone || p.member_id === me) && p.log_date >= from && p.log_date <= to)
+      .sort((a, b) => a.created_at.localeCompare(b.created_at)).map((p) => photoJSON(d, p, me)));
+  },
+});
 
 export const api = DEMO ? demo : real;
 export const DEMO_PHONES = '555-555-0101 … 0109';

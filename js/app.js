@@ -1,4 +1,5 @@
-import { api, DEMO } from './api.js';
+import { api, DEMO, photoURL } from './api.js';
+import { compressImage } from './image.js';
 import { CONFIG } from '../config.js';
 import { spriteHTML, playOnce, CAST } from './sprites.js';
 import {
@@ -72,6 +73,9 @@ function handleError(e) {
 const ICON = {
   today: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2h12v12H2z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 8h2v2h2V8h2V6h2v2h-2v2H8v2H6v-2H4z" fill="currentColor"/></svg>',
   goals: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 1h2v14H3zM5 2h8v2h-2v2h2v2H5z" fill="currentColor"/></svg>',
+  feed: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2h12v12H2zM4 4v6l3-3 2 2 1-1 2 2V4zM10 5h1v1h-1z" fill="currentColor" fill-rule="evenodd"/></svg>',
+  heart: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2h3v1h1v1h2V3h1V2h3v1h1v1h1v4h-1v1h-1v1h-1v1h-1v1h-1v1H9v1H7v-1H6v-1H5v-1H4v-1H3V9H2V8H1V4h1V3h1z" fill="currentColor"/></svg>',
+  camera: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 2h6v2h3v1h1v8h-1v1H2v-1H1V5h1V4h3zM7 6v1H6v4h1v1h2v-1h1V7H9V6z" fill="currentColor" fill-rule="evenodd"/></svg>',
   fam: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2h4v4H3zM9 2h4v4H9zM2 8h6v6H2zM8 8h6v6H8z" fill="currentColor"/></svg>',
   check: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8h2v2h2v2h2v-2h2V8h2V6h2V4h-2v2h-2v2H8v2H6V8H4V6H2z" fill="currentColor"/></svg>',
   left: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9 3h2v2H9v2H7v2h2v2h2v2H9v-2H7V9H5V7h2V5h2z" fill="currentColor"/></svg>',
@@ -110,6 +114,7 @@ function renderLogin(msg = '') {
       store.set({ token: r.token, member: r.member });
       location.hash = '#/today';
       route();
+      checkFeedDot();
     } catch (err) {
       btn.disabled = false; btn.textContent = "Let's go!";
       $('#login-err').textContent = err.code === 'unknown_phone'
@@ -121,7 +126,7 @@ function renderLogin(msg = '') {
 
 async function logout(expired = false) {
   if (S.token && !expired) api.logout(S.token).catch(() => {});
-  S.token = null; S.me = null; S.board = null; S.fam = null;
+  S.token = null; S.me = null; S.board = null; S.fam = null; S.feed = null;
   store.set(null);
   renderLogin(expired ? 'You got logged out. Pop your number back in.' : '');
 }
@@ -139,8 +144,9 @@ function shell(view) {
       <main id="view" tabindex="-1"></main>
       <nav class="tabs" aria-label="Sections">
         <a href="#/today" data-tab="today">${ICON.today}<span>Today</span></a>
-        <a href="#/goals" data-tab="goals">${ICON.goals}<span>Goals</span></a>
+        <a href="#/feed" data-tab="feed">${ICON.feed}<span>Feed</span><i class="tab-dot" id="feed-dot" hidden></i></a>
         <a href="#/fam" data-tab="fam">${ICON.fam}<span>Fam</span></a>
+        <a href="#/goals" data-tab="goals">${ICON.goals}<span>Goals</span></a>
       </nav>
     </div>`;
     $('#me-btn').addEventListener('click', () => {
@@ -159,7 +165,12 @@ async function loadMine(force = false) {
   const from = minISO(weekStart(S.date), monthStart(S.date));
   const to = maxISO(weekEnd(S.date), monthEnd(S.date));
   if (!force && S.board && S.boardRange && S.boardRange[0] <= from && S.boardRange[1] >= to) return;
-  S.board = await api.board(S.token, from, to, false);
+  const [board, photos] = await Promise.all([
+    api.board(S.token, from, to, false),
+    api.photosBetween(S.token, from, to, false).catch(() => []),
+  ]);
+  board.photos = photos || [];
+  S.board = board;
   S.boardRange = [from, to];
 }
 
@@ -246,7 +257,11 @@ function goalCardHTML(g) {
         <p class="goal-prog">${esc(p.text)}${p.complete ? ' · <b>goal hit!</b>' : ''}</p>
       </div>
     </div>
-    <textarea class="note" rows="1" maxlength="500" placeholder="Add a note…" data-act="note" aria-label="Note for ${esc(g.title)}">${esc(l && l.note)}</textarea>
+    ${thumbsHTML(g.id)}
+    <div class="note-row">
+      <textarea class="note" rows="1" maxlength="500" placeholder="Add a note…" data-act="note" aria-label="Note for ${esc(g.title)}">${esc(l && l.note)}</textarea>
+      <button class="cam-btn" data-photo-add="${g.id}" aria-label="Add a photo for ${esc(g.title)}">${ICON.camera}</button>
+    </div>
   </article>`;
 }
 
@@ -278,6 +293,8 @@ async function viewToday() {
     <section class="card daynote">
       <label for="daynote"><span class="label">How'd the day go?</span></label>
       <textarea id="daynote" rows="2" maxlength="1000" placeholder="Anything the fam should know: rest day, new PR, sore legs…" data-act="daynote">${esc(dn && dn.note)}</textarea>
+      ${thumbsHTML(null)}
+      <button class="btn small photo-btn" data-photo-add="">${ICON.camera} Post a photo</button>
     </section>`;
   $$('textarea', v).forEach(autoGrow);
 }
@@ -313,7 +330,19 @@ function celebrate(card, goal) {
   else if (p.complete) toast(`${goal.title}: goal hit for the ${goal.cadence === 'monthly' ? 'month' : 'week'}! 🏆`, 'good');
 }
 
+function thumbsHTML(goalId) {
+  const ps = (S.board.photos || []).filter((p) => p.log_date === S.date && (p.goal_id || null) === goalId);
+  if (!ps.length) return '';
+  return `<div class="thumbs">${ps.map((p) => `<button class="thumb" data-photo-view="${p.id}" aria-label="View photo">
+    <img src="${esc(photoURL(p.path))}" alt="${esc(p.caption || 'Photo')}" loading="lazy">
+    ${p.likes ? `<span class="thumb-likes">${ICON.heart}${p.likes}</span>` : ''}</button>`).join('')}</div>`;
+}
+
 function onTodayClick(e) {
+  const add = e.target.closest('[data-photo-add]');
+  if (add) { pickPhoto({ goalId: add.dataset.photoAdd || null, date: S.date }); return; }
+  const view = e.target.closest('[data-photo-view]');
+  if (view) { const p = S.board.photos.find((x) => x.id === view.dataset.photoView); if (p) openViewer(p, S.me); return; }
   const day = e.target.closest('[data-date]');
   if (day) { S.date = day.dataset.date; viewToday(); return; }
   const wk = e.target.closest('[data-week]');
@@ -666,6 +695,279 @@ function onFamClick(e) {
   }
 }
 
+// ------------------------------------------------------------------ PHOTOS
+let fileInput;
+function pickPhoto(ctx) {
+  if (!fileInput) {
+    fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/*';
+    fileInput.hidden = true;
+    document.body.append(fileInput);
+    fileInput.addEventListener('change', () => {
+      const f = fileInput.files && fileInput.files[0];
+      const c = fileInput._ctx;
+      fileInput.value = '';
+      S.picking = false;
+      if (f) openComposer(c, f);
+    });
+    fileInput.addEventListener('cancel', () => { S.picking = false; });
+  }
+  fileInput._ctx = ctx;
+  S.picking = true;
+  setTimeout(() => { S.picking = false; }, 5 * 60e3);
+  fileInput.click();
+}
+
+async function ensureBoardFor(date) {
+  if (!S.board || !S.boardRange || date < S.boardRange[0] || date > S.boardRange[1]) {
+    S.date = date;
+    await loadMine(true);
+  }
+}
+
+async function openComposer(ctx, file) {
+  const date = ctx.date || todayISO();
+  try { await ensureBoardFor(date); } catch (e) { handleError(e); return; }
+  const goals = S.board.goals.filter((g) => isActiveOn(g, date)).sort((a, b) => a.sort_order - b.sort_order);
+  const preview = URL.createObjectURL(file);
+  const dlg = document.createElement('dialog');
+  dlg.className = 'sheet';
+  dlg.innerHTML = `
+    <form class="goal-form" novalidate>
+      <div class="sheet-head"><h2>Post a photo</h2><button type="button" class="icon-btn" data-close aria-label="Close">✕</button></div>
+      <div class="compose-img"><img src="${preview}" alt="Your photo"></div>
+      <label class="field"><span class="label">Proof for which goal?</span>
+        <select name="goal">
+          <option value="">Just sharing (no goal)</option>
+          ${goals.map((g) => `<option value="${g.id}" ${g.id === ctx.goalId ? 'selected' : ''}>${g.emoji ? esc(g.emoji) + ' ' : ''}${esc(g.title)}</option>`).join('')}
+        </select>
+      </label>
+      <label class="check-line" id="mark-line" hidden><input type="checkbox" name="mark" checked> <span>Check this goal off for ${esc(relDay(date).toLowerCase() === 'today' ? 'today' : fmtShort(date))}</span></label>
+      <label class="field"><span class="label">Caption</span>
+        <textarea name="caption" rows="2" maxlength="300" placeholder="Tell the fam about it…"></textarea>
+      </label>
+      ${date !== todayISO() ? `<p class="muted small">This goes on ${esc(fmtLong(date))}.</p>` : ''}
+      <p class="err" id="post-err" role="alert"></p>
+      <div class="sheet-actions">
+        <button type="button" class="btn ghost" data-close>Cancel</button>
+        <button type="submit" class="btn primary">Post it</button>
+      </div>
+    </form>`;
+  document.body.append(dlg);
+  const f = $('form', dlg);
+  const sel = f.elements.goal;
+  const syncMark = () => {
+    const g = goals.find((x) => x.id === sel.value);
+    const show = g && g.kind === 'check' && !isHit(g, logFor(g.id, date));
+    $('#mark-line', dlg).hidden = !show;
+  };
+  sel.addEventListener('change', syncMark);
+  syncMark();
+  dlg.addEventListener('click', (e) => { if (e.target.closest('[data-close]')) dlg.close(); });
+  dlg.addEventListener('close', () => { URL.revokeObjectURL(preview); dlg.remove(); });
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = f.querySelector('[type=submit]');
+    btn.disabled = true; btn.textContent = 'Uploading…';
+    $('#post-err', dlg).textContent = '';
+    const goal = goals.find((x) => x.id === sel.value) || null;
+    try {
+      const { blob } = await compressImage(file, DEMO ? 900 : 1440, DEMO ? 0.7 : 0.8);
+      const path = await api.uploadPhoto(S.token, blob);
+      const photo = await api.addPhoto(S.token, path, goal ? goal.id : null, date, f.elements.caption.value);
+      (S.board.photos ||= []).push(photo);
+      S.feed = null;
+      let celebrated = false;
+      if (goal && !$('#mark-line', dlg).hidden && f.elements.mark.checked) {
+        const cur = logFor(goal.id, date);
+        setLocalLog(goal, date, { done: true, note: cur ? cur.note : null });
+        persistLog(goal, date);
+        celebrated = true;
+      }
+      dlg.close();
+      toast(celebrated ? `Posted + ${goal.title} checked off! 📸` : 'Posted to the feed! 📸', 'good');
+      route();
+      setTimeout(() => { playOnce($('#me-btn .spr'), 'sig'); const h = $('.hero .spr'); if (h) playOnce(h, 'sig'); }, 50);
+    } catch (err) {
+      console.error(err);
+      btn.disabled = false; btn.textContent = 'Post it';
+      $('#post-err', dlg).textContent = err.code === 'not_logged_in' ? 'You got logged out. Log back in and try again.'
+        : err.code === 'demo_storage_full' ? 'Demo mode is out of room on this phone. Connect Supabase to post more.'
+        : err.message === 'bad_image' ? "Couldn't read that photo. Try a different one."
+        : "Upload didn't go through. Check your connection and try again.";
+    }
+  });
+  dlg.showModal();
+}
+
+function likersText(p) {
+  const names = (p.likers || []).map((n) => (n === S.me.name ? 'you' : n));
+  if (!names.length) return '';
+  if (names.length <= 2) return `Liked by ${names.join(' and ')}`;
+  return `Liked by ${names.slice(0, 2).join(', ')} and ${names.length - 2} other${names.length - 2 === 1 ? '' : 's'}`;
+}
+
+function postHTML(p, members, goals) {
+  const m = members.find((x) => x.id === p.member_id) || { name: 'Someone', sprite: 'megan' };
+  const g = p.goal_id ? goals.find((x) => x.id === p.goal_id) : null;
+  const mine = p.member_id === S.me.id;
+  return `<article class="card post" data-post-id="${p.id}">
+    <header class="post-head">
+      ${spriteHTML(m.sprite, 'idle', 1)}
+      <div class="post-who"><b>${esc(m.name)}</b><span class="muted">${esc(relDay(p.log_date))}${g ? ` · ${g.emoji ? esc(g.emoji) + ' ' : ''}${esc(g.title)}` : ''}</span></div>
+      ${mine ? `<button class="btn small ghost" data-del aria-label="Delete this photo">Delete</button>` : ''}
+    </header>
+    <div class="post-img" data-dbl>
+      <img src="${esc(photoURL(p.path))}" alt="${esc(p.caption || `${m.name}'s photo`)}" loading="lazy">
+      <span class="heart-pop" aria-hidden="true">${ICON.heart}</span>
+    </div>
+    <div class="post-actions">
+      <button class="like ${p.liked ? 'on' : ''}" data-like aria-pressed="${!!p.liked}" aria-label="${p.liked ? 'Unlike' : 'Like'}">${ICON.heart}<span>${p.likes || 0}</span></button>
+      <span class="likers">${esc(likersText(p))}</span>
+    </div>
+    ${p.caption ? `<p class="caption"><b>${esc(m.name)}</b> ${esc(p.caption)}</p>` : ''}
+  </article>`;
+}
+
+async function toggleLike(id, onlyLike = false) {
+  const lists = [S.feed && S.feed.photos, S.board && S.board.photos].filter(Boolean);
+  const p = lists.flat().find((x) => x.id === id);
+  if (!p) return;
+  if (onlyLike && p.liked) return;
+  // optimistic
+  const apply = (src) => lists.forEach((l) => l.forEach((x) => { if (x.id === id) Object.assign(x, src); }));
+  const was = p.liked;
+  apply({ liked: !was, likes: (p.likes || 0) + (was ? -1 : 1),
+    likers: was ? p.likers.filter((n) => n !== S.me.name) : [...(p.likers || []), S.me.name] });
+  redrawPost(id);
+  try { apply(await api.toggleLike(S.token, id)); redrawPost(id); } catch (e) { apply({ liked: was }); handleError(e); }
+}
+
+function redrawPost(id) {
+  const el = $(`.post[data-post-id="${id}"]`);
+  if (!el || !S.feed) return;
+  const p = S.feed.photos.find((x) => x.id === id);
+  $('.like', el).outerHTML = `<button class="like ${p.liked ? 'on' : ''}" data-like aria-pressed="${!!p.liked}" aria-label="${p.liked ? 'Unlike' : 'Like'}">${ICON.heart}<span>${p.likes || 0}</span></button>`;
+  $('.likers', el).textContent = likersText(p);
+}
+
+function openViewer(p, member) {
+  const dlg = document.createElement('dialog');
+  dlg.className = 'sheet viewer';
+  dlg.innerHTML = `
+    <div class="sheet-head"><h2>${esc(member.name)} · ${esc(relDay(p.log_date))}</h2><button type="button" class="icon-btn" data-close aria-label="Close">✕</button></div>
+    <img src="${esc(photoURL(p.path))}" alt="${esc(p.caption || 'Photo')}">
+    ${p.caption ? `<p class="caption">${esc(p.caption)}</p>` : ''}
+    <p class="muted small">${p.likes ? `${ICON.heart} ${esc(likersText(p))}` : 'No likes yet'}</p>
+    <div class="sheet-actions">
+      ${p.member_id === S.me.id ? '<button class="btn small ghost" data-del>Delete photo</button>' : ''}
+      <a class="btn small" href="#/feed">See the feed</a>
+    </div>`;
+  document.body.append(dlg);
+  dlg.addEventListener('click', async (e) => {
+    if (e.target.closest('[data-close]') || e.target === dlg) dlg.close();
+    if (e.target.closest('[data-del]')) {
+      if (!confirm('Delete this photo?')) return;
+      try { await deletePhoto(p.id); dlg.close(); route(); } catch (err) { handleError(err); }
+    }
+  });
+  dlg.addEventListener('close', () => dlg.remove());
+  dlg.showModal();
+}
+
+async function deletePhoto(id) {
+  await api.deletePhoto(S.token, id);
+  if (S.board && S.board.photos) S.board.photos = S.board.photos.filter((x) => x.id !== id);
+  if (S.feed) S.feed.photos = S.feed.photos.filter((x) => x.id !== id);
+  toast('Photo deleted');
+}
+
+// ------------------------------------------------------------------ FEED
+const FEED_SEEN = 'fambam_feed_seen';
+const PAGE = 15;
+async function checkFeedDot() {
+  try {
+    const d = await api.feed(S.token, null, 1);
+    const top = d.photos[0];
+    let seen = ''; try { seen = localStorage.getItem(FEED_SEEN) || ''; } catch { /* */ }
+    const dot = $('#feed-dot');
+    if (dot) dot.hidden = !(top && top.member_id !== S.me.id && top.created_at > seen);
+  } catch { /* not important */ }
+}
+function markFeedSeen() {
+  const top = S.feed && S.feed.photos[0];
+  if (top) { try { localStorage.setItem(FEED_SEEN, top.created_at); } catch { /* */ } }
+  const dot = $('#feed-dot'); if (dot) dot.hidden = true;
+}
+
+async function viewFeed() {
+  shell('feed');
+  const v = $('#view');
+  if (!S.feed) v.innerHTML = '<div class="loading">Loading photos…</div>';
+  try {
+    const d = await api.feed(S.token, null, PAGE);
+    S.feed = { ...d, done: d.photos.length < PAGE };
+  } catch (e) { handleError(e); return; }
+  markFeedSeen();
+  renderFeed();
+}
+
+function renderFeed() {
+  const v = $('#view');
+  const { photos, members, goals } = S.feed;
+  v.innerHTML = `
+    <div class="page-head feed-head">
+      <div><h1>Feed</h1><p>Photo proof from the fam. Double-tap a photo to like it.</p></div>
+      <button class="btn primary" data-post>${ICON.camera} Post</button>
+    </div>
+    <div class="posts">
+      ${photos.length ? photos.map((p) => postHTML(p, members, goals)).join('') : `
+        <div class="card empty">
+          ${spriteHTML(S.me.sprite, 'wave', 2)}
+          <p>No photos yet. Post the first sweaty selfie!</p>
+          <button class="btn primary" data-post>${ICON.camera} Post a photo</button>
+        </div>`}
+    </div>
+    ${photos.length && !S.feed.done ? '<button class="btn wide" data-more>Load older photos</button>' : ''}
+    ${photos.length && S.feed.done ? '<p class="muted center small">That\'s everything. Go make more memories 💪</p>' : ''}`;
+}
+
+let lastTap = { id: null, t: 0 };
+async function onFeedClick(e) {
+  if (e.target.closest('[data-post]')) { pickPhoto({ goalId: null, date: todayISO() }); return; }
+  if (e.target.closest('[data-more]')) {
+    const btn = e.target.closest('[data-more]');
+    btn.disabled = true; btn.textContent = 'Loading…';
+    try {
+      const last = S.feed.photos[S.feed.photos.length - 1];
+      const d = await api.feed(S.token, last.created_at, PAGE);
+      S.feed.photos.push(...d.photos);
+      S.feed.goals = [...S.feed.goals, ...d.goals];
+      S.feed.done = d.photos.length < PAGE;
+      const y = window.scrollY; renderFeed(); window.scrollTo(0, y);
+    } catch (err) { handleError(err); btn.disabled = false; btn.textContent = 'Load older photos'; }
+    return;
+  }
+  const post = e.target.closest('.post'); if (!post) return;
+  const id = post.dataset.postId;
+  if (e.target.closest('[data-like]')) { toggleLike(id); return; }
+  if (e.target.closest('[data-del]')) {
+    if (!confirm('Delete this photo?')) return;
+    try { await deletePhoto(id); renderFeed(); } catch (err) { handleError(err); }
+    return;
+  }
+  if (e.target.closest('[data-dbl]')) {
+    const now = Date.now();
+    if (lastTap.id === id && now - lastTap.t < 350) {
+      lastTap = { id: null, t: 0 };
+      const pop = $('.heart-pop', post);
+      pop.classList.remove('go'); void pop.offsetWidth; pop.classList.add('go');
+      toggleLike(id, true);
+    } else lastTap = { id, t: now };
+  }
+}
+
 // ------------------------------------------------------------------ router
 function route() {
   if (!S.token) { renderLogin(); return; }
@@ -673,6 +975,7 @@ function route() {
   closeDialogs();
   if (r === 'goals') viewGoals();
   else if (r === 'fam') viewFam();
+  else if (r === 'feed') viewFeed();
   else viewToday();
   const view = $('#view'); if (view) view.scrollTop = 0;
   window.scrollTo(0, 0);
@@ -684,6 +987,7 @@ app.addEventListener('click', (e) => {
   if (!$('#view') || !$('#view').contains(e.target)) return;
   if (r === 'goals') onGoalsClick(e);
   else if (r === 'fam') onFamClick(e);
+  else if (r === 'feed') onFeedClick(e);
   else onTodayClick(e);
 });
 app.addEventListener('input', (e) => {
@@ -694,9 +998,14 @@ window.addEventListener('hashchange', route);
 
 // Coming back to the app later? Refresh the data (and roll "today" forward).
 let lastSeenDay = todayISO();
+let hiddenAt = 0;
 document.addEventListener('visibilitychange', async () => {
-  if (document.visibilityState !== 'visible' || !S.token) return;
-  if (debouncers.size) return; // don't clobber unsaved typing
+  if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
+  if (!S.token) return;
+  // the photo picker also hides the page; only refresh after a real break
+  if (Date.now() - hiddenAt < 90e3 && todayISO() === lastSeenDay) return;
+  if (debouncers.size || S.picking || $('dialog[open]')) return; // don't clobber typing or an open sheet
+  S.feed = null;
   if (todayISO() !== lastSeenDay) { if (S.date === lastSeenDay) S.date = todayISO(); lastSeenDay = todayISO(); }
   S.board = null; S.boardRange = null;
   route();
@@ -713,6 +1022,7 @@ document.addEventListener('visibilitychange', async () => {
       const me = await api.me(S.token);
       if (me && me.sprite !== S.me.sprite) { S.me = me; store.set({ token: S.token, member: me }); refreshMeSprite(); }
     } catch (e) { if (e.code === 'not_logged_in') logout(true); }
+    checkFeedDot();
   } else {
     renderLogin();
   }
