@@ -37,7 +37,7 @@ There is no build step. It's plain HTML, CSS and JavaScript, so it can be hosted
 ### Managing people later
 - **Add someone:** in **Table Editor → members**, insert a row with their `name`, `phone`, and `sprite` (`mark, jaimi, megan, nate, matthew, riley, julia, staci, carol`). You can also re-run `seed.sql`.
 - **Change a number:** edit the `phone` cell. Any format works, because it's stored as the last 10 digits.
-- People can change their own character on the **Goals** tab.
+- Each person's character comes from the `sprite` column on their members row. People can't change it in the app.
 
 > **Heads up on security:** logging in only needs a phone number on the list. That's fine for a family challenge, but anyone who knows a family member's number could log in as them. If you want more, ask Claude to add a PIN or real SMS codes (Supabase phone auth + Twilio).
 

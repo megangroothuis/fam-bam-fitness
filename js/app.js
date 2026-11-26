@@ -438,14 +438,8 @@ async function viewGoals() {
     <div class="ideas">
       ${TEMPLATES.map((t, i) => `<button class="chip" data-tpl="${i}">${t.emoji} ${esc(t.title)} · ${esc(cadenceText(t))}</button>`).join('')}
     </div>
-    <h2 class="sub">Your character</h2>
-    <div class="cast-pick" role="radiogroup" aria-label="Pick your character">
-      ${Object.entries(CAST).map(([k, c]) => `
-        <button class="cast-opt ${S.me.sprite === k ? 'sel' : ''}" role="radio" aria-checked="${S.me.sprite === k}" data-sprite="${k}">
-          ${spriteHTML(k, S.me.sprite === k ? 'wave' : 'idle', 1)}<span>${c.name}</span>
-        </button>`).join('')}
-    </div>
     <div class="account">
+      ${spriteHTML(S.me.sprite, 'wave', 1)}
       <p class="muted">Logged in as <b>${esc(S.me.name)}</b></p>
       <button class="btn small ghost" data-logout>Log out</button>
     </div>`;
@@ -460,14 +454,6 @@ async function onGoalsClick(e) {
     const g = S.board.goals.find((x) => x.id === b.dataset.remove);
     if (!confirm(`Remove "${g.title}"? Your past check-ins stay in the history.`)) return;
     try { await api.archiveGoal(S.token, g.id); await loadMine(true); viewGoals(); toast('Goal removed'); } catch (err) { handleError(err); }
-  } else if (b.dataset.sprite) {
-    const k = b.dataset.sprite;
-    S.me = { ...S.me, sprite: k };
-    store.set({ token: S.token, member: S.me });
-    $$('.cast-opt').forEach((o) => { const on = o.dataset.sprite === k; o.classList.toggle('sel', on); o.setAttribute('aria-checked', on); o.querySelector('.spr').dataset.anim = on ? 'wave' : 'idle'; });
-    refreshMeSprite();
-    playOnce($('#me-btn .spr'), 'sig');
-    try { await api.setSprite(S.token, k); } catch (err) { handleError(err); }
   } else if (b.hasAttribute('data-logout')) logout();
 }
 

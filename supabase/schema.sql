@@ -155,13 +155,8 @@ begin
   return fb_member_json(m);
 end $$;
 
-create or replace function fb_set_sprite(p_token uuid, p_sprite text) returns jsonb
-language plpgsql security definer set search_path = public as $$
-declare m members;
-begin
-  update members set sprite = p_sprite where id = fb_member_for(p_token) returning * into m;
-  return fb_member_json(m);
-end $$;
+-- characters are assigned by the organizer (members.sprite), not chosen in the app
+drop function if exists fb_set_sprite(uuid, text);
 
 -- Everything the app needs for a date range, for one person or everyone.
 --   p_everyone = false -> just me (Today / Goals screens)
@@ -292,7 +287,7 @@ begin
   end loop;
   if exists (select 1 from pg_roles where rolname = 'anon') then
     foreach r in array array[
-      'fb_login(text)', 'fb_logout(uuid)', 'fb_me(uuid)', 'fb_set_sprite(uuid,text)',
+      'fb_login(text)', 'fb_logout(uuid)', 'fb_me(uuid)',
       'fb_board(uuid,date,date,boolean)', 'fb_save_goal(uuid,jsonb)', 'fb_archive_goal(uuid,uuid)',
       'fb_save_log(uuid,uuid,date,boolean,numeric,text)', 'fb_save_day_note(uuid,date,text)']
     loop

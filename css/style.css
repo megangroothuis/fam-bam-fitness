@@ -275,14 +275,9 @@ h2.sub { font-size: 20px; margin: 26px 2px 10px; }
 .ideas { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip { background: var(--paper); padding: 6px 10px; margin: var(--px); font-size: 14px; font-weight: 700; text-align: left; }
 .chip:active { background: var(--gold-2); }
-.cast-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
-.cast-opt {
-  display: grid; justify-items: center; gap: 2px; padding: 8px 4px 6px; background: none; border: 3px solid transparent;
-  font: 700 14px var(--pixel);
-}
-.cast-opt.sel { background: var(--gold-2); border-color: var(--line); }
-.account { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 28px; padding-top: 14px; border-top: 3px dashed var(--soft); }
-.account p { margin: 0; }
+.account { display: flex; align-items: center; justify-content: flex-start; gap: 10px; margin-top: 28px; padding-top: 14px; border-top: 3px dashed var(--soft); }
+.account p { margin: 0; flex: 1; }
+.account .spr { height: 54px; }
 
 /* ---------- goal editor sheet ---------- */
 .sheet {

@@ -36,7 +36,6 @@ const real = {
   login: (phone) => rpc('fb_login', { p_phone: phone }),
   logout: (t) => rpc('fb_logout', { p_token: t }),
   me: (t) => rpc('fb_me', { p_token: t }),
-  setSprite: (t, sprite) => rpc('fb_set_sprite', { p_token: t, p_sprite: sprite }),
   board: (t, from, to, everyone) => rpc('fb_board', { p_token: t, p_from: from, p_to: to, p_everyone: everyone }),
   saveGoal: (t, goal) => rpc('fb_save_goal', { p_token: t, p_goal: goal }),
   archiveGoal: (t, id) => rpc('fb_archive_goal', { p_token: t, p_goal_id: id }),
@@ -145,9 +144,6 @@ const demo = {
   },
   async logout(t) { const d = db(); delete d.sessions[t]; save(d); },
   async me(t) { const d = db(); return wait(pub(d.members.find((m) => m.id === who(d, t)))); },
-  async setSprite(t, sprite) {
-    const d = db(); const m = d.members.find((x) => x.id === who(d, t)); m.sprite = sprite; save(d); return wait(pub(m));
-  },
   async board(t, from, to, everyone) {
     const d = db(); const me = who(d, t);
     const mine = (x) => everyone || x.member_id === me;
