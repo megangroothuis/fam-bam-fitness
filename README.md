@@ -88,3 +88,7 @@ supabase/schema.sql   tables, security, and API functions
 supabase/photos.sql   photos, likes, storage bucket + upload policy
 supabase/seed.sql     the roster (names, phones, sprites)
 ```
+
+## Publishing changes
+
+After editing anything in `css/` or `js/`, run `python3 tools/bump_version.py` before you commit. It stamps a new version on every file so phones fetch the new code, and open copies of the app reload themselves once they see the new `version.json`.

@@ -1,12 +1,12 @@
-import { api, DEMO, photoURL } from './api.js';
-import { compressImage } from './image.js';
-import { CONFIG } from '../config.js';
-import { spriteHTML, playOnce, CAST } from './sprites.js';
+import { api, DEMO, photoURL } from './api.js?v=20261126154947';
+import { compressImage } from './image.js?v=20261126154947';
+import { CONFIG } from '../config.js?v=20261126154947';
+import { spriteHTML, playOnce, CAST } from './sprites.js?v=20261126154947';
 import {
   todayISO, addDays, weekStart, weekEnd, monthStart, monthEnd, range, minISO, maxISO,
   fmtLong, fmtShort, relDay, DOW_LETTER, DOW_SHORT, WEEK_ORDER, dow, fromISO,
-} from './dates.js';
-import { progress, weekScore, dayState, isActiveOn, isScheduledOn, isHit, cadenceText } from './progress.js';
+} from './dates.js?v=20261126154947';
+import { progress, weekScore, dayState, isActiveOn, isScheduledOn, isHit, cadenceText } from './progress.js?v=20261126154947';
 
 // ------------------------------------------------------------------ helpers
 const $ = (s, el = document) => el.querySelector(s);
@@ -997,8 +997,31 @@ document.addEventListener('visibilitychange', async () => {
   route();
 });
 
+// ------------------------------------------------------------------ updates
+// Phones hang on to old copies of the app. When a newer version is published
+// (version.json changes), refresh the cached page and reload.
+const APP_V = new URL(import.meta.url).searchParams.get('v');
+async function checkForUpdate() {
+  if (!APP_V) return;
+  try {
+    const r = await fetch(`version.json?t=${Date.now()}`, { cache: 'no-store' });
+    if (!r.ok) return;
+    const { version } = await r.json();
+    if (!version || version === APP_V) return;
+    if (debouncers.size || S.picking || $('dialog[open]')) { setTimeout(checkForUpdate, 30e3); return; }
+    let tried = null; try { tried = sessionStorage.getItem('fambam_update_try'); } catch { /* */ }
+    if (tried === version) { toast('New version out! Close and reopen the app to get it.'); return; }
+    try { sessionStorage.setItem('fambam_update_try', version); } catch { /* */ }
+    await Promise.all(['./', 'index.html'].map((u) => fetch(u, { cache: 'reload' }).catch(() => {})));
+    location.reload();
+  } catch { /* offline: try again later */ }
+}
+setInterval(checkForUpdate, 10 * 60e3);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkForUpdate(); });
+
 // ------------------------------------------------------------------ boot
 (async function boot() {
+  checkForUpdate();
   document.title = CONFIG.CHALLENGE_NAME || 'Fam Bam Fitness Challenge';
   const saved = store.get();
   if (saved && saved.token) {

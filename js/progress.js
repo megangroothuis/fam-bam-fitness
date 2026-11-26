@@ -5,7 +5,7 @@
 import {
   weekStart, weekEnd, monthStart, monthEnd, range, dow, maxISO, minISO,
   DOW_SHORT, WEEK_ORDER, monthName, todayISO, daysInMonth,
-} from './dates.js';
+} from './dates.js?v=20261126154947';
 
 const num = (n) => (Math.round(Number(n) * 100) / 100).toLocaleString();
 const unitOf = (g) => (g.unit || '').trim();
