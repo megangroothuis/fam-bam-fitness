@@ -95,13 +95,13 @@ end $$;
 -- ---------- Helpers ---------------------------------------------------
 
 create or replace function fb_norm_phone(p text) returns text
-language sql immutable as $$
+language sql immutable set search_path = public as $$
   select right(regexp_replace(coalesce(p, ''), '\D', '', 'g'), 10)
 $$;
 
 -- Keep phones normalized no matter how they're typed into the table editor
 create or replace function fb_members_norm() returns trigger
-language plpgsql as $$
+language plpgsql set search_path = public as $$
 begin
   new.phone := fb_norm_phone(new.phone);
   new.sprite := lower(coalesce(new.sprite, 'megan'));
@@ -124,7 +124,7 @@ begin
 end $$;
 
 create or replace function fb_member_json(m members) returns jsonb
-language sql stable as $$
+language sql stable set search_path = public as $$
   select jsonb_build_object('id', m.id, 'name', m.name, 'sprite', m.sprite)
 $$;
 

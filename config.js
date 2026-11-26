@@ -3,7 +3,7 @@
 // functions that check each person's login.
 // Leave SUPABASE_URL empty to try the app in demo mode (data stays on that phone).
 export const CONFIG = {
-  SUPABASE_URL: '',  // e.g. 'https://abcdefghijklmnop.supabase.co'
-  SUPABASE_KEY: '',  // the "anon public" key, or the "publishable" key (sb_publishable_...)
+  SUPABASE_URL: 'https://acnilkjcsnpycwwudkpa.supabase.co',
+  SUPABASE_KEY: 'sb_publishable_m_GEvQ-nzcp3Uw_VW7L97g_NHB4VFDs',
   CHALLENGE_NAME: 'Fam Bam Fitness Challenge',
 };
