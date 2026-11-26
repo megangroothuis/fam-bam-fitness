@@ -1,7 +1,7 @@
 // Talks to Supabase (Postgres functions via the REST "rpc" endpoint).
 // If config.js has no Supabase URL, it runs a demo backend in this browser instead.
-import { CONFIG } from '../config.js?v=20261126154947';
-import { todayISO, addDays, weekStart } from './dates.js?v=20261126154947';
+import { CONFIG } from '../config.js?v=20261126160150';
+import { todayISO, addDays, weekStart } from './dates.js?v=20261126160150';
 
 export const DEMO = !CONFIG.SUPABASE_URL;
 const BASE = () => CONFIG.SUPABASE_URL.replace(/\/$/, '');
@@ -196,7 +196,7 @@ function photoJSON(d, p, me) {
 }
 Object.assign(demo, {
   async uploadPhoto(t, blob) {
-    const { blobToDataURL } = await import('./image.js?v=20261126154947');
+    const { blobToDataURL } = await import('./image.js?v=20261126160150');
     return blobToDataURL(blob);
   },
   async addPhoto(t, path, goalId, date, caption) {

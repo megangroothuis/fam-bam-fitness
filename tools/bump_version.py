@@ -15,6 +15,7 @@ files = [root / 'index.html', *sorted((root / 'js').glob('*.js'))]
 for f in files:
     text = f.read_text()
     new = pattern.sub(lambda m: f"{m.group(1)}?v={version}{m.group(2)}", text)
+    new = re.sub(r"const ASSET_V = '[\w.-]*'", f"const ASSET_V = '{version}'", new)
     if new != text:
         f.write_text(new)
 (root / 'version.json').write_text(json.dumps({'version': version}) + '\n')

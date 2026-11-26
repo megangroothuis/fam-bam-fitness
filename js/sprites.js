@@ -1,4 +1,4 @@
-// Pixel sprites: 48×54 frames, 4 rows (idle, walk, wave, signature). Jaimi brings her collie.
+// Pixel sprites: 48×54 frames, 4 rows (idle, walk, wave, signature). Mark, Jaimi and Megan bring their pets.
 export const CAST = {
   mark: { name: 'Mark', sig: 'cheer' },
   jaimi: { name: 'Jaimi', sig: 'pet' },
@@ -13,14 +13,18 @@ export const CAST = {
 const ROWS = { idle: [0, 2], walk: [1, 4], wave: [2, 2], sig: [3, 2] };
 const FW = 48, FH = 54, DOGW = 30, DOG_OFFSET = 33;
 
+// Pets stand 33px right of their owner and play the same row
+const ASSET_V = '20261126160150'; // bumped by tools/bump_version.py so phones fetch new art
+const PETS = { jaimi: 'jaimi_collie', mark: 'mark_livy', megan: 'megan_bunny' };
+
 export function spriteHTML(key, anim = 'idle', scale = 3, extraClass = '') {
   key = CAST[key] ? key : 'megan';
-  const hasDog = key === 'jaimi';
-  const w = (hasDog ? DOG_OFFSET + DOGW : FW) * scale;
+  const pet = PETS[key];
+  const w = (pet ? DOG_OFFSET + DOGW : FW) * scale;
   return `<span class="spr ${extraClass}" data-key="${key}" data-anim="${anim}" data-scale="${scale}"
     style="width:${w}px;height:${FH * scale}px" aria-hidden="true">
-    <span class="spr-body" style="width:${FW * scale}px;height:${FH * scale}px;background-image:url(assets/sprites/${key}.png);background-size:${192 * scale}px ${216 * scale}px"></span>
-    ${hasDog ? `<span class="spr-dog" style="left:${DOG_OFFSET * scale}px;width:${DOGW * scale}px;height:${FH * scale}px;background-image:url(assets/sprites/jaimi_dog.png);background-size:${120 * scale}px ${216 * scale}px"></span>` : ''}
+    <span class="spr-body" style="width:${FW * scale}px;height:${FH * scale}px;background-image:url(assets/sprites/${key}.png?v=${ASSET_V});background-size:${192 * scale}px ${216 * scale}px"></span>
+    ${pet ? `<span class="spr-dog" style="left:${DOG_OFFSET * scale}px;width:${DOGW * scale}px;height:${FH * scale}px;background-image:url(assets/sprites/pets/${pet}.png?v=${ASSET_V});background-size:${120 * scale}px ${216 * scale}px"></span>` : ''}
   </span>`;
 }
 
